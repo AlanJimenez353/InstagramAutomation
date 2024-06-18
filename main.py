@@ -1,14 +1,20 @@
-from moviepy.editor import ImageClip, concatenate_videoclips
-from PIL import Image, ImageDraw, ImageFont
 import os
 import textwrap
+import requests
+from moviepy.editor import ImageClip, concatenate_videoclips, AudioFileClip
+from PIL import Image, ImageDraw, ImageFont
+from dotenv import load_dotenv
 
-# Configuraciones generales
-IMAGE_FOLDER = r"C:\Users\Alan\Documents\CodeProjects\InstagramReels\Resources\Images"
-NEWS_VIDEO_OUTPUT = "noticias_argentina.mp4"
-FONT_PATH = "arial.ttf"  # Asegúrate de tener la ruta correcta a una fuente ttf
-IMAGE_SIZE = (1280, 720)  # Tamaño estándar para todas las imágenes (720p)
-IMAGE_DURATION = 3  # Duración de cada imagen en segundos
+# Cargar las variables de entorno desde el archivo .env
+load_dotenv(dotenv_path=r'C:\Users\Alan\Documents\CodeProjects\InstagramReels\.env')
+
+# Configuraciones generales cargadas desde el archivo .env
+IMAGE_FOLDER = os.getenv('IMAGE_FOLDER')
+NEWS_VIDEO_OUTPUT = os.getenv('NEWS_VIDEO_OUTPUT')
+FONT_PATH = os.getenv('FONT_PATH')
+IMAGE_SIZE = (int(os.getenv('IMAGE_SIZE_WIDTH')), int(os.getenv('IMAGE_SIZE_HEIGHT')))
+AUDIO_FOLDER = os.getenv('AUDIO_FOLDER')
+ELEVEN_LABS_API_KEY = os.getenv('ELEVEN_LABS_API_KEY')
 
 # Lista de noticias
 noticias = [
@@ -18,6 +24,9 @@ noticias = [
     "Conservación Ambiental: Científicos y ambientalistas argentinos devolvieron al mar a un grupo de pingüinos magallánicos que habían sido rescatados y tratados por malnutrición e hipotermia​",
     "Reformas Gubernamentales: En un esfuerzo por modernizar la economía y reducir el tamaño del estado, el gobierno argentino sigue adelante con sus planes para privatizar Aerolíneas Argentinas y otras firmas estatales. Esta medida forma parte de un paquete de reformas promovido por el presidente Javier Milei, destinado a fomentar la austeridad y la eficiencia en la administración pública"
 ]
+
+if not os.path.exists(AUDIO_FOLDER):
+    os.makedirs(AUDIO_FOLDER)
 
 def find_image_paths(news_id):
     image_paths = []
@@ -58,14 +67,35 @@ def generate_image_with_text(image_path, text):
     combined = Image.alpha_composite(base_image, txt)
     return combined.convert("RGB")
 
+def generate_audio_eleven_labs(text, filename):
+    url = "https://api.elevenlabs.io/v1/text-to-speech"
+    headers = {
+        "Accept": "audio/wav",
+        "Content-Type": "application/json",
+        "xi-api-key": ELEVEN_LABS_API_KEY
+    }
+    payload = {
+        "text": text,
+        "voice": "Joanna"  # Cambia esto por el nombre de la voz que prefieras usar
+    }
+    response = requests.post(url, headers=headers, json=payload)
+    audio_path = os.path.join(AUDIO_FOLDER, filename)
+    with open(audio_path, "wb") as f:
+        f.write(response.content)
+    return audio_path
+
 def create_news_clip(news, images):
     clips = []
     text_chunks = split_text(news, len(images))
-    for image, text_chunk in zip(images, text_chunks):
+    for idx, (image, text_chunk) in enumerate(zip(images, text_chunks)):
         img_with_text = generate_image_with_text(image, text_chunk)
-        img_with_text_path = image.replace(".jpg", "_with_text.jpg")
+        img_with_text_path = image.replace(".jpg", f"_with_text_{idx}.jpg")
         img_with_text.save(img_with_text_path)
-        clip = ImageClip(img_with_text_path).set_duration(IMAGE_DURATION)
+
+        audio_path = generate_audio_eleven_labs(text_chunk, f"audio_{idx}.wav")
+        audio_clip = AudioFileClip(audio_path)
+
+        clip = ImageClip(img_with_text_path).set_duration(audio_clip.duration).set_audio(audio_clip)
         clips.append(clip)
     return clips
 
