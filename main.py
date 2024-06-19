@@ -22,14 +22,12 @@ IMAGE_SIZE = (int(os.getenv('IMAGE_SIZE_WIDTH')), int(os.getenv('IMAGE_SIZE_HEIG
 AUDIO_FOLDER = os.getenv('AUDIO_FOLDER')
 ELEVEN_LABS_API_KEY = os.getenv('ELEVEN_LABS_API_KEY')
 client = ElevenLabs(api_key=ELEVEN_LABS_API_KEY)
-
-# Lista de noticias
-
-
 if not os.path.exists(AUDIO_FOLDER):
     os.makedirs(AUDIO_FOLDER)
-
-def find_image_paths(news_id):
+    
+    
+#-------------------------------------------------------------------- Methods --------------------------------------------------------------------
+def find_image_paths(news_id): 
     image_paths = []
     i = 1
     while True:
@@ -45,6 +43,50 @@ def split_text(text, num_parts):
     wrapped_text = textwrap.wrap(text, width=40)
     chunk_size = max(1, len(wrapped_text) // num_parts)
     return ["\n".join(wrapped_text[i:i + chunk_size]) for i in range(0, len(wrapped_text), chunk_size)]
+
+    
+    
+# --------------------------------------------------------------------  Audio Methods --------------------------------------------------------------------
+
+def concatenate_audios(audio_paths, crossfade_duration=1000):  # crossfade_duration en milisegundos
+    combined_audio = AudioSegment.silent(duration=0)  # Iniciar con un segmento de silencio
+
+    for path in audio_paths:
+        current_audio = AudioSegment.from_file(path)
+        if combined_audio.duration_seconds > 0:  # Si ya hay audio en el combinado, aplicar crossfade
+            combined_audio = combined_audio.append(current_audio, crossfade=crossfade_duration)
+        else:
+            combined_audio = current_audio
+
+    return combined_audio
+
+def generate_audio_eleven_labs(text, voice_id, audio_filename):
+    # Hacer la llamada a la API usando el cliente
+    response = client.text_to_speech.convert(
+        voice_id=voice_id,
+        optimize_streaming_latency="0",
+        output_format="mp3_22050_32",
+        text=text,
+        model_id="eleven_multilingual_v2",  # Ajusta el model_id según necesites
+        voice_settings=VoiceSettings(
+            stability=0.5,          # Expected to be greater or equal to 0.0 and less or equal to 1.0
+            similarity_boost=0.75,
+            style=0.0,
+            use_speaker_boost=True,
+        ),
+    )
+
+    # Guardar el archivo de audio
+    save_file_path = os.path.join(AUDIO_FOLDER, f"{audio_filename}.mp3")
+    with open(save_file_path, "wb") as f:
+        for chunk in response:
+            if chunk:
+                f.write(chunk)
+
+    print(f"{save_file_path}: A new audio file was saved successfully!")
+    return save_file_path
+
+#-------------------------------------------------------------------- Image Methods --------------------------------------------------------------------
 
 def generate_image_with_text(image_path, text):
     base_image = Image.open(image_path).convert("RGBA").resize(IMAGE_SIZE)
@@ -69,73 +111,58 @@ def generate_image_with_text(image_path, text):
     return combined.convert("RGB")
 
     
-def generate_audio_eleven_labs(text, voice_id, audio_filename):
-    # Hacer la llamada a la API usando el cliente
-    response = client.text_to_speech.convert(
-        voice_id=voice_id,
-        optimize_streaming_latency="0",
-        output_format="mp3_22050_32",
-        text=text,
-        model_id="eleven_turbo_v2",  # Ajusta el model_id según necesites
-        voice_settings=VoiceSettings(
-            stability=0.0,
-            similarity_boost=1.0,
-            style=0.0,
-            use_speaker_boost=True,
-        ),
-    )
+#-------------------------------------------------------------------- Video Methods --------------------------------------------------------------------
 
-    # Guardar el archivo de audio
-    save_file_path = os.path.join(AUDIO_FOLDER, f"{audio_filename}.mp3")
-    with open(save_file_path, "wb") as f:
-        for chunk in response:
-            if chunk:
-                f.write(chunk)
-
-    print(f"{save_file_path}: A new audio file was saved successfully!")
-    return save_file_path
-
-def create_news_clip(news, news_index, images):
+def create_news_clip(news, news_index, images, transition_duration=1):
     clips = []
+    audio_paths = []
     text_chunks = split_text(news, len(images))
-    date_str = datetime.now().strftime("%Y%m%d_%H%M%S")  # Fecha y hora actual para el nombre del archivo
+    date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     for idx, (image, text_chunk) in enumerate(zip(images, text_chunks)):
         img_with_text = generate_image_with_text(image, text_chunk)
         img_with_text_path = image.replace(".jpg", f"_with_text_{idx}.jpg")
         img_with_text.save(img_with_text_path)
 
-        audio_filename = f"audio_{news_index}_{idx}_{date_str}"
-        audio_path = generate_audio_eleven_labs(text_chunk, "onwK4e9ZLuTAKqWW03F9", audio_filename)
+        audio_filename = f"audio_{news_index}_{idx}_{date_str}.mp3"
+        audio_path = generate_audio_eleven_labs(text_chunk, "JBFqnCBsd6RMkjVDRZzb", audio_filename)
         if audio_path is None:
             print(f"Audio generation failed for text chunk {idx}. Skipping this clip.")
             continue
+        audio_paths.append(audio_path)
 
         audio_clip = AudioFileClip(audio_path)
-        clip = ImageClip(img_with_text_path).set_duration(audio_clip.duration).set_audio(audio_clip)
+        clip_duration = audio_clip.duration
+        clip = ImageClip(img_with_text_path).set_duration(clip_duration).set_audio(audio_clip)
+        clip = clip.crossfadein(transition_duration)  # Aplicar fade in al clip
         clips.append(clip)
-    return clips
+
+    return clips, audio_paths
 
 def create_complete_video(news_list):
     final_clips = []
+    audio_paths = []
     for index, news in enumerate(news_list, start=1):
         print(f"Procesando la noticia {index}")
         images = find_image_paths(index)
         if images:
-            # Añadir el index como segundo argumento
-            news_clip = create_news_clip(news, index, images)
-            final_clips.extend(news_clip)
+            news_clips, news_audio_paths = create_news_clip(news, index, images)
+            final_clips.extend(news_clips)
+            audio_paths.extend(news_audio_paths)
         else:
             print(f"No se encontraron imágenes para la noticia {index}")
-    
+
     if final_clips:
+        # Ajusta el crossfade_duration según necesites
+        combined_audio = concatenate_audios(audio_paths, crossfade_duration=1000)
+        combined_audio_path = "combined_audio.mp3"
+        combined_audio.export(combined_audio_path, format="mp3")
+
         video = concatenate_videoclips(final_clips, method="compose")
+        video.audio = AudioFileClip(combined_audio_path)
         video.write_videofile(NEWS_VIDEO_OUTPUT, fps=24)
         print("Video creado con éxito.")
-    else:
-        print("No se pudieron crear los clips de video.")
-
-
+#-------------------------------------------------------------------- Main --------------------------------------------------------------------
 def main(news_list):
     if not news_list:
         print("No se proporcionaron noticias para procesar.")
