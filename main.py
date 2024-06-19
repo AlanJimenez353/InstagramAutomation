@@ -69,22 +69,73 @@ def generate_audio_eleven_labs(text, voice_id, audio_filename):
     print(f"{save_file_path}: A new audio file was saved successfully!")
     return save_file_path
 
+from PIL import Image, ImageDraw, ImageFont
+
+from PIL import Image, ImageDraw, ImageFont
+
+from PIL import Image, ImageDraw, ImageFont
+
 def generate_image_with_text(image_path, text):
     base_image = Image.open(image_path).convert("RGBA").resize(IMAGE_SIZE)
     txt = Image.new("RGBA", base_image.size, (255, 255, 255, 0))
     draw = ImageDraw.Draw(txt)
-    font = ImageFont.truetype(FONT_PATH, 30)
-    margin = 10
-    lines = text.split('\n')
-    total_height = sum([draw.textbbox((0, 0), line, font=font)[3] for line in lines])
-    y = base_image.height - total_height - margin
+    
+    # Configuración de la fuente
+    font_size = 30
+    font = ImageFont.truetype(FONT_PATH, font_size)
+    max_width = int(base_image.width * 0.8)  # Máximo 80% del ancho de la imagen
+    
+    # Dividir el texto en líneas ajustadas al ancho máximo
+    lines = wrap_text(text, font, max_width, draw)  # Pasa draw aquí
+    text_height = font_size * len(lines)
+
+    # Posicionamiento del texto
+    text_x = base_image.width // 2
+    text_y = base_image.height - text_height - 50  # 50 píxeles del borde inferior
+    
+    # Dibujar el rectángulo negro semi-transparente
+    rectangle_margin = 20
+    rectangle_height = text_height + 2 * rectangle_margin
+    rectangle_y = text_y - rectangle_margin
+
+    draw.rectangle(
+        [(text_x - max_width // 2 - rectangle_margin, rectangle_y),
+         (text_x + max_width // 2 + rectangle_margin, rectangle_y + rectangle_height)],
+        fill=(0, 0, 0, 127))  # Rectángulo semi-transparente
+
+    # Dibujar el texto línea por línea
+    current_y = text_y
     for line in lines:
-        width, height = draw.textbbox((0, 0), line, font=font)[2:]
-        x = (base_image.width - width) / 2
-        draw.text((x, y), line, font=font, fill=(255, 255, 255, 255))
-        y += height
+        line_width = draw.textlength(line, font=font)
+        line_x = text_x - line_width // 2
+        draw.text((line_x, current_y), line, font=font, fill="white")
+        current_y += font_size  # Moverse hacia abajo para la siguiente línea
+
+    # Combinar la imagen base con el texto y el rectángulo
     combined = Image.alpha_composite(base_image, txt)
     return combined.convert("RGB")
+
+def wrap_text(text, font, max_width, draw):
+    """Divide el texto en líneas asegurando que no exceda el ancho máximo."""
+    words = text.split()
+    lines = []
+    current_line = []
+
+    for word in words:
+        test_line = ' '.join(current_line + [word])
+        # Comprueba el ancho del texto provisional
+        if draw.textlength(test_line, font=font) > max_width:
+            lines.append(' '.join(current_line))
+            current_line = [word]
+        else:
+            current_line.append(word)
+    
+    # Asegúrate de añadir la última línea si hay palabras restantes
+    if current_line:
+        lines.append(' '.join(current_line))
+    
+    return lines
+
 
 def create_complete_video(news_list):
     final_clips = []
