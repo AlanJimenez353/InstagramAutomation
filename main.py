@@ -1,8 +1,6 @@
 import os
 import sys
 import uuid
-import textwrap
-import requests
 from dotenv import load_dotenv
 from datetime import datetime
 from pydub import AudioSegment
