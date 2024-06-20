@@ -2,15 +2,19 @@ import os
 import sys
 import uuid
 from dotenv import load_dotenv
-from datetime import datetime
-from pydub import AudioSegment
+from openai import OpenAI
 from elevenlabs import VoiceSettings
 from elevenlabs.client import ElevenLabs
 from PIL import Image, ImageDraw, ImageFont
 from moviepy.editor import ImageClip, concatenate_videoclips, AudioFileClip
+import requests
 
 # Cargar las variables de entorno desde el archivo .env
 load_dotenv(dotenv_path=r'C:\Users\Alan\Documents\CodeProjects\InstagramReels\.env')
+
+# Variables OpenAI
+api_key = os.getenv("OPENAI_API_KEY")
+openai = OpenAI(api_key=api_key) # Inicializa el cliente de OpenAI con API key
 
 # Configuraciones generales cargadas desde el archivo .env
 IMAGE_FOLDER = os.getenv('IMAGE_FOLDER')
@@ -66,12 +70,6 @@ def generate_audio_eleven_labs(text, voice_id, audio_filename):
             f.write(chunk)
     print(f"{save_file_path}: A new audio file was saved successfully!")
     return save_file_path
-
-from PIL import Image, ImageDraw, ImageFont
-
-from PIL import Image, ImageDraw, ImageFont
-
-from PIL import Image, ImageDraw, ImageFont
 
 def generate_image_with_text(image_path, text):
     base_image = Image.open(image_path).convert("RGBA").resize(IMAGE_SIZE)
@@ -134,18 +132,63 @@ def wrap_text(text, font, max_width, draw):
     
     return lines
 
+import openai
+
+def generate_and_save_images(news, images_path, number_of_images=3):
+    os.makedirs(images_path, exist_ok=True)
+    for i in range(number_of_images):
+        # Generar un prompt más detallado para cada noticia
+        prompt = f"Crear una imagen que visualice esta noticia: {news}. La imagen debe capturar los elementos claves y el contexto de la noticia de manera artística y relevante."
+        try:
+            response = openai.images.generate(
+                model="dall-e-3",
+                prompt=prompt,
+                n=1,
+                size="1024x1024",
+                quality="standard"
+            )
+
+            print("Respuesta completa de la API:")
+            print(response)
+
+            # Asegurarse de que la respuesta contiene datos y acceder correctamente a la URL
+            if response.data:
+                image_url = response.data[0].url
+                print(f"URL de la imagen: {image_url}")
+                print("\n" + "-"*80 + "\n")
+
+                filename = f"NewsImage_{uuid.uuid4().hex}.png"
+                path_to_save_image = os.path.join(images_path, filename)
+
+                # Descargar y guardar la imagen
+                image_response = requests.get(image_url)
+                if image_response.status_code == 200:
+                    with open(path_to_save_image, 'wb') as file:
+                        file.write(image_response.content)
+                    print(f"Imagen descargada y guardada en {path_to_save_image}")
+                else:
+                    print("Error al descargar la imagen desde:", image_url)
+            else:
+                print("No se encontraron datos de imagen en la respuesta.")
+
+        except Exception as e:
+            print(f"Error generando la imagen: {e}")
 
 def create_complete_video(news_list):
     final_clips = []
-    audio_paths = []  # Lista para mantener las rutas de los archivos de audio
     for index, news in enumerate(news_list, start=1):
-        print(f"Procesando la noticia {index}")
-        images = find_image_paths(index)
+        images_path = os.path.join(IMAGE_FOLDER, f"News_{index}")
+        os.makedirs(images_path, exist_ok=True)
+        
+        print(f"Generando imágenes para la noticia {index}")
+        generate_and_save_images(news, images_path)
+
+        image_files = [os.path.join(images_path, file) for file in os.listdir(images_path)]
         text_chunks = split_text_at_commas(news)
-        for image_path, text_chunk in zip(images, text_chunks):
+
+        for image_path, text_chunk in zip(image_files, text_chunks):
             audio_filename = f"audio_{index}_{uuid.uuid4()}.mp3"
             audio_path = generate_audio_eleven_labs(text_chunk, "VR6AewLTigWG4xSOukaG", audio_filename)
-            audio_paths.append(audio_path)  # Guardar la ruta para usar después
             
             img_with_text = generate_image_with_text(image_path, text_chunk)
             img_with_text_path = image_path.replace(".jpg", "_with_text.jpg")
@@ -159,13 +202,6 @@ def create_complete_video(news_list):
         video = concatenate_videoclips(final_clips, method="compose")
         video.write_videofile(NEWS_VIDEO_OUTPUT, fps=24)
         print("Video creado con éxito.")
-        
-        # Limpieza: Cerrar y eliminar los archivos de audio una vez que el video está completamente exportado
-        for audio_path in audio_paths:
-            try:
-                os.remove(audio_path)  # Intenta eliminar el archivo de audio
-            except Exception as e:
-                print(f"Failed to delete {audio_path}: {e}")
 
 
 
