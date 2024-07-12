@@ -148,8 +148,8 @@ def generate_and_save_images(news, images_path, number_of_images=3):
                 quality="standard"
             )
 
-            print("Respuesta completa de la API:")
-            print(response)
+            #print("Respuesta completa de la API:")
+            #print(response)
 
             # Asegurarse de que la respuesta contiene datos y acceder correctamente a la URL
             if response.data:
@@ -214,8 +214,9 @@ def main(news_list):
 
 if __name__ == "__main__":
     noticias = [
-    "Inflación y Política Económica: La inflación mensual en Argentina ha disminuido a un 4.2%, Este es el nivel más bajo desde enero de 2022, Este descenso se marca como el quinto mes consecutivo de desaceleración",
-    "Conservación Ambiental: Científicos y ambientalistas argentinos devolvieron al mar a un grupo de pingüinos magallánicos, Estos habían sido rescatados y tratados por malnutrición e hipotermia​",
+    "Intervención del Ministerio de Trabajo: El Ministerio de Trabajo de Argentina, ha detenido una huelga planeada por los pilotos de aerolíneas, permitiendo que los vuelos operen normalmente mientras continúan las negociaciones salariales.",
+    "Viajes Presidenciales: El presidente de Argentina, está actualmente en Estados Unidos asistiendo a una reunión, que reúne a figuras prominentes de los sectores tecnológico y empresarial.",
+    "Desarrollos Económicos: Buenos Aires ha sido nombrada la ciudad más habitable de Sudamérica, debido a sus fuertes instituciones educativas, como la Universidad de Buenos Aires y la estabilidad general.",
     ]
     main(noticias)
 
