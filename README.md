@@ -9,6 +9,14 @@ This Python script automates the process of creating videos from news articles, 
 - **Subtitle Creation**: Splits the article into manageable parts for subtitles based on its length.
 - **Audio Synthesis**: Utilizes ElevenLabs API to create natural-sounding voiceovers timed with subtitles.
 
+
+
+
+For a live demonstration of the script in action, check out the video here: 
+[Watch our demo video](https://www.youtube.com/watch?v=d_IhUdas7IA)
+
+
+
 ## Getting Started
 
 ### Prerequisites
